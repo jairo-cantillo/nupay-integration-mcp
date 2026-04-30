@@ -10,6 +10,8 @@ import { registerGetSchemaTool } from "./tools/get-schema.js";
 import { registerPlanIntegrationTool } from "./tools/plan-integration.js";
 import { registerLookupEndpointTool } from "./tools/lookup-endpoint.js";
 import { registerSandboxScenariosTool } from "./tools/sandbox-scenarios.js";
+import { registerStart2faPrompt } from "./prompts/start-2fa.js";
+import { registerStartTokenizedPrompt } from "./prompts/start-tokenized.js";
 
 const server = new McpServer(
   {
@@ -33,6 +35,10 @@ registerGetSchemaTool(server);
 registerLookupEndpointTool(server);
 registerPlanIntegrationTool(server);
 registerSandboxScenariosTool(server);
+
+// Prompts
+registerStart2faPrompt(server);
+registerStartTokenizedPrompt(server);
 
 async function main() {
   const transport = new StdioServerTransport();
