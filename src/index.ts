@@ -7,7 +7,9 @@ import { registerGuide2faResource } from "./resources/guide-2fa.js";
 import { registerGuideTokenizedResource } from "./resources/guide-tokenized.js";
 import { registerPatternsResource } from "./resources/patterns.js";
 import { registerGetSchemaTool } from "./tools/get-schema.js";
+import { registerPlanIntegrationTool } from "./tools/plan-integration.js";
 import { registerLookupEndpointTool } from "./tools/lookup-endpoint.js";
+import { registerSandboxScenariosTool } from "./tools/sandbox-scenarios.js";
 
 const server = new McpServer(
   {
@@ -29,6 +31,8 @@ registerPatternsResource(server);
 // Tools
 registerGetSchemaTool(server);
 registerLookupEndpointTool(server);
+registerPlanIntegrationTool(server);
+registerSandboxScenariosTool(server);
 
 async function main() {
   const transport = new StdioServerTransport();
