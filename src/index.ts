@@ -2,6 +2,10 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { registerOpenapiResource } from "./resources/openapi.js";
+import { registerGuide2faResource } from "./resources/guide-2fa.js";
+import { registerGuideTokenizedResource } from "./resources/guide-tokenized.js";
+import { registerPatternsResource } from "./resources/patterns.js";
 
 const server = new McpServer(
   {
@@ -13,6 +17,12 @@ const server = new McpServer(
       "NuPay payment API integration assistant. Provides API reference, integration guides for 2FA and Tokenized payment flows, and sandbox test scenarios. Use the tools and resources to help merchants build production-grade NuPay integrations.",
   }
 );
+
+// Resources
+registerOpenapiResource(server);
+registerGuide2faResource(server);
+registerGuideTokenizedResource(server);
+registerPatternsResource(server);
 
 async function main() {
   const transport = new StdioServerTransport();
