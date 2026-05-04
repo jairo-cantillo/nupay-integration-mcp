@@ -68,6 +68,12 @@ This is the standard checkout flow where the customer approves each payment in t
 - Log \`x-transaction-id\` response header on EVERY API call
 - Store associated with payment record for support troubleshooting
 
+### 10. (Marketplaces) Register Recipients
+- If you transact on behalf of sellers, BCB requires identifying final beneficiaries
+- \`POST /v1/recipients\` to register each seller with name, document (CPF/CNPJ), bank account
+- Add \`recipients\` array to payment creation with \`referenceId\` and \`amount\` per beneficiary
+- Maximum 10 recipients per payment
+
 ## Endpoints Needed
 | Method | Path | Purpose |
 |---|---|---|
@@ -77,13 +83,16 @@ This is the standard checkout flow where the customer approves each payment in t
 | POST | /v1/checkouts/payments/{pspReferenceId}/cancel | Cancel unpaid |
 | POST | /v1/checkouts/payments/{pspReferenceId}/refunds | Create refund |
 | GET | /v1/checkouts/payments/{pspReferenceId}/refunds/{refundId} | Check refund status |
+| POST | /v1/recipients | Register final beneficiary (marketplaces) |
+| GET | /v1/recipients/{referenceId} | Check beneficiary registration |
 
 ## Common Pitfalls
 - Reading status from webhook notification (it's not there — always poll)
-- Amount as decimal (must be integer centavos: R$100.00 = 10000)
+- Amount as centavos (must be reais as decimal: R$100.00 = \`100.00\`, NOT \`10000\`)
 - Forgetting x-transaction-id logging (you'll need it for support)
 - Not implementing polling fallback (webhooks can fail)
 - Trying to cancel a COMPLETED payment (use refund instead)
+- Not implementing retry with exponential backoff for 429/5xx errors
 
 ## Sandbox Testing
 Use the \`get_sandbox_test_scenarios\` tool with flow="2fa" for complete test amount ranges.
@@ -155,6 +164,12 @@ Choose based on channel:
 - Discard \`refresh_token\` after cancellation
 - Next purchase requires new authorization flow
 
+### 10. (Marketplaces) Register Recipients
+- If you transact on behalf of sellers, BCB requires identifying final beneficiaries
+- \`POST /v1/recipients\` to register each seller with name, document (CPF/CNPJ), bank account
+- Add \`recipients\` array to payment creation with \`referenceId\` and \`amount\` per beneficiary
+- Maximum 10 recipients per payment
+
 ## Endpoints Needed
 | Method | Path | Purpose |
 |---|---|---|
@@ -167,9 +182,11 @@ Choose based on channel:
 | GET | /v1/checkouts/payments/{pspReferenceId}/status | Poll status |
 | POST | /v1/checkouts/payments/{pspReferenceId}/refunds | Create refund |
 | GET | /v1/checkouts/payments/{pspReferenceId}/refunds/{refundId} | Check refund |
+| POST | /v1/recipients | Register final beneficiary (marketplaces) |
+| GET | /v1/recipients/{referenceId} | Check beneficiary registration |
 
 ## Common Pitfalls
-- All 2FA pitfalls apply (webhook, centavos, logging, polling)
+- All 2FA pitfalls apply (webhook, amount format, logging, polling)
 - Not refreshing access_token before payment creation (5 min TTL)
 - Reusing expired code (valid only 10 minutes)
 - Sharing private JWK key (d property) — only share public key
@@ -181,20 +198,94 @@ Use the \`get_sandbox_test_scenarios\` tool with flow="tokenized" for complete t
 Test CPFs: \`58188896454\` (approve), \`31457612500\` (reject).
 `;
 
-export function planIntegration(useCase: string): string {
+const FRAMEWORK_NOTES: Record<string, string> = {
+  node: `## Framework Notes — Node.js
+
+- Use native \`fetch\` (Node 18+) — no need for axios
+- Store \`x-transaction-id\` in request context or middleware for tracing
+- Use \`crypto.randomUUID()\` for generating \`referenceId\` and \`transactionRefundId\`
+- For webhook handler: use \`express.json()\` middleware, respond 200 immediately, then poll async
+- Use \`get_code_example\` tool with language="nodejs" for ready-to-use snippets`,
+
+  python: `## Framework Notes — Python
+
+- Use \`requests\` library for API calls
+- Store \`x-transaction-id\` via \`logging\` context or structlog
+- Use \`uuid.uuid4()\` for generating \`referenceId\` and \`transactionRefundId\`
+- For webhook handler: Flask (\`@app.route\`) or FastAPI (\`@app.post\`) — respond 200 immediately, poll async
+- Use \`get_code_example\` tool with language="python" for ready-to-use snippets`,
+
+  java: `## Framework Notes — Java
+
+- Use \`java.net.http.HttpClient\` (Java 11+) — no external dependencies needed
+- Store \`x-transaction-id\` in MDC (Mapped Diagnostic Context) for structured logging
+- Use \`UUID.randomUUID().toString()\` for generating \`referenceId\` and \`transactionRefundId\`
+- For webhook handler: Spring Boot \`@RestController\` — respond 200, process async via \`@Async\` or message queue
+- Use \`get_code_example\` tool with language="java" for ready-to-use snippets`,
+};
+
+const PLATFORM_NOTES: Record<string, string> = {
+  desktop: `## Platform Notes — Desktop
+
+- Use \`paymentUrl\` from payment creation response to redirect the customer
+- Two options: **full page redirect** (simpler) or **iframe embed** (better UX, keeps customer on your site)
+- For iframe: listen for \`postMessage\` events from the NuPay hosted page for completion/cancellation
+- Customer approves payment in Nubank app → redirected to \`returnUrl\`
+- Customer cancels → redirected to \`cancelUrl\``,
+
+  mobile: `## Platform Notes — Mobile
+
+- \`paymentUrl\` is a Nubank deep link — opens the Nubank app directly
+- **Android:** Launch via \`Intent\` with the paymentUrl as the URI
+- **iOS:** Use Universal Links — the URL scheme triggers the Nubank app
+- If Nubank app is not installed, the URL falls back to the Nubank web page
+- After approval/cancellation, customer returns to your app via \`returnUrl\`/\`cancelUrl\``,
+};
+
+function getFrameworkNotes(language: string): string {
+  const l = language.toLowerCase();
+  if (l.includes("node") || l.includes("express") || l.includes("fastify") || l.includes("javascript") || l.includes("typescript")) return FRAMEWORK_NOTES.node;
+  if (l.includes("python") || l.includes("django") || l.includes("flask") || l.includes("fastapi")) return FRAMEWORK_NOTES.python;
+  if (l.includes("java") || l.includes("spring") || l.includes("kotlin")) return FRAMEWORK_NOTES.java;
+  return "";
+}
+
+function getPlatformNotes(platform: string): string {
+  const p = platform.toLowerCase();
+  if (p === "both") return PLATFORM_NOTES.desktop + "\n\n" + PLATFORM_NOTES.mobile;
+  if (p === "desktop" || p === "web") return PLATFORM_NOTES.desktop;
+  if (p === "mobile" || p === "app") return PLATFORM_NOTES.mobile;
+  return "";
+}
+
+export function planIntegration(useCase: string, language?: string, platform?: string): string {
   const flow = detectFlow(useCase);
-  return flow === "tokenized" ? PLAN_TOKENIZED : PLAN_2FA;
+  let plan = flow === "tokenized" ? PLAN_TOKENIZED : PLAN_2FA;
+
+  if (language) {
+    const notes = getFrameworkNotes(language);
+    if (notes) plan += "\n" + notes;
+  }
+
+  if (platform) {
+    const notes = getPlatformNotes(platform);
+    if (notes) plan += "\n\n" + notes;
+  }
+
+  return plan;
 }
 
 export function registerPlanIntegrationTool(server: McpServer): void {
   server.tool(
     "plan_integration",
-    "Generate a step-by-step NuPay integration plan based on the merchant's use case. Automatically routes to the correct flow (2FA for standard checkout, Tokenized for recurring/subscriptions). Returns ordered steps, endpoints needed, common pitfalls, and sandbox testing guidance.",
+    "Generate a step-by-step NuPay integration plan based on the merchant's use case. Automatically routes to the correct flow (2FA for standard checkout, Tokenized for recurring/subscriptions). Optionally accepts language and platform for framework-specific guidance. Returns ordered steps, endpoints needed, common pitfalls, and sandbox testing guidance.",
     {
       use_case: z.string().describe("Description of the merchant's integration need (e.g., 'one-time e-commerce checkout', 'recurring subscription billing', 'charge customers monthly without approval')"),
+      language: z.string().optional().describe("Programming language and framework (e.g., 'Node.js/Express', 'Python/Django', 'Java/Spring Boot'). Adds framework-specific notes to the plan."),
+      platform: z.string().optional().describe("Target platform: 'desktop', 'mobile', or 'both'. Adds platform-specific guidance for handling paymentUrl."),
     },
-    async ({ use_case }) => ({
-      content: [{ type: "text" as const, text: planIntegration(use_case) }],
+    async ({ use_case, language, platform }) => ({
+      content: [{ type: "text" as const, text: planIntegration(use_case, language, platform) }],
     })
   );
 }

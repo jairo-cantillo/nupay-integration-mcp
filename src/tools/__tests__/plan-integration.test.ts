@@ -26,4 +26,39 @@ describe("planIntegration", () => {
     expect(result).toContain("webhook");
     expect(result).toContain("x-transaction-id");
   });
+
+  it("appends Node.js framework notes when language provided", () => {
+    const result = planIntegration("checkout", "Node.js/Express");
+    expect(result).toContain("Framework Notes");
+    expect(result).toContain("native `fetch`");
+    expect(result).toContain("crypto.randomUUID()");
+  });
+
+  it("appends Python framework notes", () => {
+    const result = planIntegration("checkout", "Python/Django");
+    expect(result).toContain("requests");
+    expect(result).toContain("uuid.uuid4()");
+  });
+
+  it("appends desktop platform notes", () => {
+    const result = planIntegration("checkout", undefined, "desktop");
+    expect(result).toContain("Platform Notes");
+    expect(result).toContain("iframe");
+  });
+
+  it("appends both platform notes", () => {
+    const result = planIntegration("checkout", undefined, "both");
+    expect(result).toContain("Desktop");
+    expect(result).toContain("Mobile");
+    expect(result).toContain("deep link");
+  });
+
+  it("works with all parameters combined", () => {
+    const result = planIntegration("e-commerce checkout", "Java/Spring Boot", "mobile");
+    expect(result).toContain("2FA");
+    expect(result).toContain("Framework Notes");
+    expect(result).toContain("HttpClient");
+    expect(result).toContain("Platform Notes");
+    expect(result).toContain("Intent");
+  });
 });

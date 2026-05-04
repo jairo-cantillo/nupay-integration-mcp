@@ -1,12 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { openapiSpec } from "../knowledge.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const specPath = resolve(__dirname, "../../knowledge/nupay_openapi.json");
-const spec = JSON.parse(readFileSync(specPath, "utf-8"));
+const spec = JSON.parse(openapiSpec);
 
 function resolveRef(ref: string, root: Record<string, unknown>): unknown {
   const parts = ref.replace("#/", "").split("/");

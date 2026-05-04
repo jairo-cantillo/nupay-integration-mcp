@@ -4,7 +4,7 @@ import { getSandboxScenarios } from "../sandbox-scenarios.js";
 describe("getSandboxScenarios", () => {
   it("returns 2FA test scenarios", () => {
     const result = getSandboxScenarios("2fa");
-    expect(result).toContain("R$0.01");
+    expect(result).toContain("0.01");
     expect(result).toContain("SYSTEM_ERROR");
     expect(result).toContain("Cancelled by Nubank");
     expect(result).toContain("Cancelled by customer");

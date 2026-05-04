@@ -1,6 +1,6 @@
 {
   "name": "@nupay/integration-mcp",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "MCP server for NuPay payment API integration assistance",
   "type": "module",
   "main": "dist/index.js",
@@ -8,7 +8,7 @@
     "nupay-integration-mcp": "dist/index.js"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --clean && sed -i '' 's|../../knowledge/|../knowledge/|g' dist/index.js",
+    "build": "tsup src/index.ts --format esm --dts --clean",
     "dev": "tsx src/index.ts",
     "test": "vitest run",
     "test:watch": "vitest"

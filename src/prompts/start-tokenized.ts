@@ -44,7 +44,7 @@ ${needs_installments === "yes" ? "- Display BCB IN83 required fields: interest%,
 - Log x-transaction-id from every API response
 - Handle all error codes and cancellation codes
 - Implement webhook receiver with polling fallback
-- Use amount in centavos (integer), currency BRL
+- Use amount as reais decimal (e.g. 110.01 for R$110.01), currency BRL — NOT centavos
 - Use referenceId for payment idempotency, transactionRefundId for refund idempotency
 - Handle token cancellation/revocation
 

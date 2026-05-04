@@ -40,10 +40,10 @@ Notifications can fail. Implement a polling fallback:
 
 ## Amount Format
 
-- All monetary values are in **centavos** (integer)
-- Example: R$100.00 = `10000`
+- All monetary values are in **reais** (decimal number, e.g. `110.01` for R$110.01)
+- Do NOT use centavos — the API expects the real value as a float
 - Currency must be `BRL`
-- Field: `amount.value` (integer), `amount.currency` (string, "BRL")
+- Field: `amount.value` (number, format double), `amount.currency` (string, "BRL")
 
 ## Debug Logging
 
@@ -76,6 +76,33 @@ Every NuPay API response includes the header `x-transaction-id`. You MUST:
 - Merchant must have available balance to process refunds
 - NuPay does not extend credit for refunds
 - Each refund gets its own `refundId` and lifecycle
+
+## Rate Limits & Retry Strategy
+
+The NuPay API returns `429 Too Many Requests` when rate limits are exceeded.
+
+**Recommended retry strategy:**
+- Use exponential backoff: 1s → 2s → 4s → 8s → max 30s
+- Respect the `Retry-After` header when present
+- Maximum 3 retries for transient errors (429, 500, 502, 503, 504)
+- Do NOT retry 400/401/422 errors — fix the request instead
+- Log `x-transaction-id` for every failed attempt
+
+**Per-endpoint guidance:**
+- Payment creation (`POST /v1/checkouts/payments`): safe to retry if you use `referenceId` for idempotency
+- Refund creation (`POST /v1/checkouts/payments/{id}/refunds`): safe to retry with same `transactionRefundId`
+- Status polling (`GET .../status`): safe to retry (read-only)
+- Token exchange (`POST /v1/token`): retry with backoff, but beware of concurrent refresh invalidating tokens
+
+## Recipients (Final Beneficiary)
+
+For **marketplace** merchants transacting on behalf of sellers, BCB Circular 3.978/2020 requires identifying the final beneficiary of each payment.
+
+- Register beneficiaries: `POST /v1/recipients` with legal name, document (CPF/CNPJ), and bank account
+- Reference in payments: add `recipients` array to payment creation with `referenceId` and `amount` per beneficiary
+- Query: `GET /v1/recipients/{referenceId}` to check registration status
+- Maximum 10 recipients per payment
+- This field is optional and non-blocking — payments succeed even if recipients aren't registered yet, but compliance requires it
 
 ## Environment URLs
 

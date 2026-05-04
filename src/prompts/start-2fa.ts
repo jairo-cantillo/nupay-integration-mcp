@@ -36,7 +36,7 @@ Requirements for the generated code:
 - Handle all cancellation codes (CANCELLED_BY_INSTITUTION, CANCELLED_BY_USER, CANCELLED_BY_TIMEOUT, CANCELLED_BY_SELLER, SYSTEM_ERROR)
 - Implement webhook receiver that polls status after notification (notifications don't contain the status)
 - Implement polling fallback (15-60 min interval)
-- Use amount in centavos (integer), currency BRL
+- Use amount as reais decimal (e.g. 110.01 for R$110.01), currency BRL — NOT centavos
 - Use referenceId for idempotency
 ${has_webhook_endpoint === "no" ? "- Create the webhook endpoint from scratch" : "- Integrate with my existing webhook endpoint"}
 ${platform === "desktop" || platform === "both" ? "- Handle desktop flow with paymentUrl (iframe or redirect)" : ""}

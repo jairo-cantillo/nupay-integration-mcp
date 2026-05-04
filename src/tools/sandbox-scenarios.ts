@@ -9,26 +9,28 @@ const SCENARIOS_2FA = `# NuPay 2FA Sandbox Test Scenarios
 
 ## Test Amount Ranges
 
-| Amount Range (BRL) | Expected Outcome | Payment Status |
+| amount.value | Expected Outcome | Payment Status |
 |---|---|---|
-| R$0.01 – R$100.00 (1 – 10000) | Debit payment — success | COMPLETED |
-| R$101.00 – R$200.00 (10100 – 20000) | Credit payment — success | COMPLETED |
-| R$201.00 – R$300.00 (20100 – 30000) | Credit installment with interest — success | COMPLETED |
-| R$301.00 – R$702.00 (30100 – 70200) | Debit payment — success | COMPLETED |
-| R$703.00 – R$803.00 (70300 – 80300) | System error | ERROR (SYSTEM_ERROR) |
-| R$804.00 – R$904.00 (80400 – 90400) | Cancelled by Nubank | CANCELLED (CANCELLED_BY_INSTITUTION) |
-| R$905.00 – R$1005.00 (90500 – 100500) | Cancelled by customer | CANCELLED (CANCELLED_BY_USER) |
-| R$1006.00 – R$1106.00 (100600 – 110600) | Cancelled by timeout | CANCELLED (CANCELLED_BY_TIMEOUT) |
-| > R$1106.00 (> 110600) | Debit payment — success | COMPLETED |
+| 0.01 – 100.00 | Debit payment — success | COMPLETED |
+| 101.00 – 200.00 | Credit payment — success | COMPLETED |
+| 201.00 – 300.00 | Credit installment with interest — success | COMPLETED |
+| 301.00 – 702.00 | Debit payment — success | COMPLETED |
+| 703.00 – 803.00 | System error | ERROR (SYSTEM_ERROR) |
+| 804.00 – 904.00 | Cancelled by Nubank | CANCELLED (CANCELLED_BY_INSTITUTION) |
+| 905.00 – 1005.00 | Cancelled by customer | CANCELLED (CANCELLED_BY_USER) |
+| 1006.00 – 1106.00 | Cancelled by timeout | CANCELLED (CANCELLED_BY_TIMEOUT) |
+| > 1106.00 | Debit payment — success | COMPLETED |
+
+**Important:** amounts are in reais (decimal), NOT centavos. Use \`{ "value": 50.00, "currency": "BRL" }\` for R$50.00.
 
 ## Recommended Test Sequence
 
-1. **Happy path:** Create payment with amount 5000 (R$50.00) → expect COMPLETED
-2. **Credit:** Create payment with amount 15000 (R$150.00) → expect COMPLETED
-3. **System error:** Create payment with amount 75000 (R$750.00) → expect ERROR
-4. **Institution cancel:** Create payment with amount 85000 (R$850.00) → expect CANCELLED_BY_INSTITUTION
-5. **User cancel:** Create payment with amount 95000 (R$950.00) → expect CANCELLED_BY_USER
-6. **Timeout cancel:** Create payment with amount 105000 (R$1050.00) → expect CANCELLED_BY_TIMEOUT
+1. **Happy path:** Create payment with amount.value \`50.00\` → expect COMPLETED
+2. **Credit:** Create payment with amount.value \`150.00\` → expect COMPLETED
+3. **System error:** Create payment with amount.value \`750.00\` → expect ERROR
+4. **Institution cancel:** Create payment with amount.value \`850.00\` → expect CANCELLED_BY_INSTITUTION
+5. **User cancel:** Create payment with amount.value \`950.00\` → expect CANCELLED_BY_USER
+6. **Timeout cancel:** Create payment with amount.value \`1050.00\` → expect CANCELLED_BY_TIMEOUT
 7. **Refund:** After a COMPLETED payment, create a refund and verify REFUNDED status
 
 ## Notes
@@ -51,36 +53,38 @@ const SCENARIOS_TOKENIZED = `# NuPay Tokenized Sandbox Test Scenarios
 
 ## Test Amount Ranges — Payment Conditions
 
-| Amount Range (BRL) | Available Payment Methods |
+| amount.value | Available Payment Methods |
 |---|---|
-| R$0.01 – R$100.00 (1 – 10000) | Debit only |
-| R$101.00 – R$200.00 (10100 – 20000) | Credit only |
-| R$201.00 – R$300.00 (20100 – 30000) | Debit + Credit |
-| R$601.00 – R$700.00 (60100 – 70000) | credit_with_additional_limit only |
-| R$701.00 – R$800.00 (70100 – 80000) | Credit + credit_with_additional_limit |
-| R$801.00 – R$900.00 (80100 – 90000) | Debit + credit_with_additional_limit |
-| R$901.00 – R$1000.00 (90100 – 100000) | All three (debit, credit, credit_with_additional_limit) |
-| > R$10,000.00 (> 1000000) | None available |
-| R$1107.00 – R$1206.00 (110700 – 120600) | Credit installments with interest |
+| 0.01 – 100.00 | Debit only |
+| 101.00 – 200.00 | Credit only |
+| 201.00 – 300.00 | Debit + Credit |
+| 601.00 – 700.00 | credit_with_additional_limit only |
+| 701.00 – 800.00 | Credit + credit_with_additional_limit |
+| 801.00 – 900.00 | Debit + credit_with_additional_limit |
+| 901.00 – 1000.00 | All three (debit, credit, credit_with_additional_limit) |
+| > 10000.00 | None available |
+| 1107.00 – 1206.00 | Credit installments with interest |
 
 ## Test Amount Ranges — Payment Outcomes
 
-| Amount Range (BRL) | Expected Outcome |
+| amount.value | Expected Outcome |
 |---|---|
-| R$0.01 – R$702.00 (1 – 70200) | Payment success (method depends on conditions above) |
-| R$703.00 – R$803.00 (70300 – 80300) | System error (SYSTEM_ERROR) |
-| R$804.00 – R$904.00 (80400 – 90400) | Cancelled by Nubank (CANCELLED_BY_INSTITUTION) |
+| 0.01 – 702.00 | Payment success (method depends on conditions above) |
+| 703.00 – 803.00 | System error (SYSTEM_ERROR) |
+| 804.00 – 904.00 | Cancelled by Nubank (CANCELLED_BY_INSTITUTION) |
+
+**Important:** amounts are in reais (decimal), NOT centavos. Use \`{ "value": 50.00, "currency": "BRL" }\` for R$50.00.
 
 ## Recommended Test Sequence
 
 1. **Authorize:** Use CPF \`58188896454\` to get tokens via OAuth2 or CIBA
 2. **Rejected auth:** Use CPF \`31457612500\` to test authorization rejection
-3. **Check conditions:** Query payment conditions with amount 95000 (R$950.00) → expect all three methods
-4. **Debit payment:** Amount 5000 (R$50.00) with fundingSource "debit" → COMPLETED
-5. **Credit payment:** Amount 15000 (R$150.00) with fundingSource "credit" → COMPLETED
-6. **Additional limit:** Amount 65000 (R$650.00) with fundingSource "credit_with_additional_limit" → COMPLETED
-7. **Installments:** Amount 115000 (R$1150.00) → verify interest fields in conditions response
-8. **System error:** Amount 75000 (R$750.00) → expect ERROR
+3. **Check conditions:** Query payment conditions with amount.value \`950.00\` → expect all three methods
+4. **Debit payment:** amount.value \`50.00\` with fundingSource "debit" → COMPLETED
+5. **Credit payment:** amount.value \`150.00\` with fundingSource "credit" → COMPLETED
+6. **Additional limit:** amount.value \`650.00\` with fundingSource "credit_with_additional_limit" → COMPLETED
+7. **Installments:** amount.value \`1150.00\` → verify interest fields in conditions response
+8. **System error:** amount.value \`750.00\` → expect ERROR
 9. **Refund:** After COMPLETED payment, test full and partial refund
 10. **Token refresh:** Use refresh_token to get new access_token, verify old one is invalidated
 

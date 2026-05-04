@@ -1,11 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const specPath = resolve(__dirname, "../../knowledge/nupay_openapi.json");
-const specContent = readFileSync(specPath, "utf-8");
+import { openapiSpec } from "../knowledge.js";
 
 export function registerOpenapiResource(server: McpServer): void {
   server.resource(
@@ -20,7 +14,7 @@ export function registerOpenapiResource(server: McpServer): void {
       contents: [
         {
           uri: "nupay://api/openapi-spec",
-          text: specContent,
+          text: openapiSpec,
           mimeType: "application/json",
         },
       ],

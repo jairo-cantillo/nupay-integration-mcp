@@ -1,11 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const guidePath = resolve(__dirname, "../../knowledge/guide-tokenized.md");
-const guideContent = readFileSync(guidePath, "utf-8");
+import { guideTokenized } from "../knowledge.js";
 
 export function registerGuideTokenizedResource(server: McpServer): void {
   server.resource(
@@ -20,7 +14,7 @@ export function registerGuideTokenizedResource(server: McpServer): void {
       contents: [
         {
           uri: "nupay://guides/tokenized",
-          text: guideContent,
+          text: guideTokenized,
           mimeType: "text/markdown",
         },
       ],

@@ -1,12 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { openapiSpec } from "../knowledge.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const specPath = resolve(__dirname, "../../knowledge/nupay_openapi.json");
-const spec = JSON.parse(readFileSync(specPath, "utf-8"));
+const spec = JSON.parse(openapiSpec);
 const schemas = (spec.components?.schemas ?? {}) as Record<string, unknown>;
 
 function resolveRef(ref: string, root: Record<string, unknown>): unknown {
@@ -41,10 +37,28 @@ function resolveRefs(obj: unknown, root: Record<string, unknown>, depth = 0): un
   return obj;
 }
 
-function fuzzyMatch(query: string, schemaName: string): boolean {
-  const queryLower = query.toLowerCase().replace(/[_\-\s]+/g, "");
-  const nameLower = schemaName.toLowerCase().replace(/[_\-\s]+/g, "");
-  return nameLower.includes(queryLower) || queryLower.split("").every((char) => nameLower.includes(char));
+const MAX_FUZZY_RESULTS = 3;
+
+// Primary schemas (Request/Response) are more likely what users want
+const PRIMARY_SUFFIXES = ["request", "response"];
+
+/** Score a match: higher = better. 0 = no match. */
+function matchScore(query: string, schemaName: string): number {
+  const q = query.toLowerCase().replace(/[_\-\s]+/g, "");
+  const n = schemaName.toLowerCase().replace(/[_\-\s]+/g, "");
+  const isPrimary = PRIMARY_SUFFIXES.some((s) => n.endsWith(s));
+  const primaryBonus = isPrimary ? 25 : 0;
+
+  // Exact match (case-insensitive, normalized)
+  if (n === q) return 100;
+  // Prefix match
+  if (n.startsWith(q)) return 80 + primaryBonus;
+  // Substring match
+  if (n.includes(q)) return 60 + primaryBonus;
+  // Query words all present in name (e.g. "checkout creation" → NuPayCheckoutCreationRequest)
+  const words = query.toLowerCase().split(/[_\-\s]+/).filter(Boolean);
+  if (words.length > 1 && words.every((w) => n.includes(w))) return 40 + primaryBonus;
+  return 0;
 }
 
 export function getSchema(name: string): string {
@@ -53,20 +67,27 @@ export function getSchema(name: string): string {
     return `# Available NuPay API Schemas (${names.length})\n\n${names.map((n) => `- ${n}`).join("\n")}`;
   }
 
+  // Exact match by original name
   if (schemas[name]) {
     const resolved = resolveRefs(schemas[name], spec);
     return `# Schema: ${name}\n\n\`\`\`json\n${JSON.stringify(resolved, null, 2)}\n\`\`\``;
   }
 
-  const matches = Object.keys(schemas).filter((n) => fuzzyMatch(name, n));
-  if (matches.length === 0) {
+  // Scored fuzzy matching, limited to top results
+  const scored = Object.keys(schemas)
+    .map((n) => ({ name: n, score: matchScore(name, n) }))
+    .filter((m) => m.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, MAX_FUZZY_RESULTS);
+
+  if (scored.length === 0) {
     return `No schema found matching "${name}". Use get_schema with an empty name to list all available schemas.`;
   }
 
-  return matches
-    .map((n) => {
-      const resolved = resolveRefs(schemas[n], spec);
-      return `# Schema: ${n}\n\n\`\`\`json\n${JSON.stringify(resolved, null, 2)}\n\`\`\``;
+  return scored
+    .map((m) => {
+      const resolved = resolveRefs(schemas[m.name], spec);
+      return `# Schema: ${m.name}\n\n\`\`\`json\n${JSON.stringify(resolved, null, 2)}\n\`\`\``;
     })
     .join("\n\n---\n\n");
 }
