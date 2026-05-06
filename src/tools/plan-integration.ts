@@ -33,9 +33,10 @@ This is the standard checkout flow where the customer approves each payment in t
 - Also handle refund notifications at \`{callbackUrl}/refunds\`
 - Implement polling fallback (every 15-60 min) for missed notifications
 
-### 3. (Optional) Check Payment Conditions
+### 3. Check Payment Conditions (Mandatory)
 - \`POST /v2/checkouts/payment-conditions\` with \`{ amount, document }\`
-- Tells you if NuPay is available for this customer/amount
+- **Mandatory before creating a payment** — checks if NuPay is available for this customer/amount
+- **\`document\` (CPF) is required** in the 2FA flow — the API uses it to identify the customer's Nubank account
 - If 400 "Payment options not available" → hide NuPay from checkout
 
 ### 4. Create Payment
@@ -51,14 +52,19 @@ This is the standard checkout flow where the customer approves each payment in t
 - Customer approves in Nubank app → redirected to \`returnUrl\`
 - Customer cancels → redirected to \`cancelUrl\`
 
-### 6. Poll Payment Status
+### 6. Poll Payment Status (Source of Truth)
 - \`GET /v1/checkouts/payments/{pspReferenceId}/status\`
-- Handle statuses: COMPLETED, CANCELLED (check code for reason), ERROR
+- **Polling is the only reliable way to know the real status of a payment** — webhooks are just a trigger signal
+- Implement two layers: **reactive** (poll after every webhook) + **proactive fallback** (poll every 15-60 min for pending payments)
+- Handle statuses: COMPLETED → confirm order, CANCELLED (check \`code\` for reason) → cancel order, ERROR → alert for review
+- Stop polling when payment reaches a final status (\`COMPLETED\`, \`CANCELLED\`, or \`ERROR\`)
 
 ### 7. Implement Refunds
 - \`POST /v1/checkouts/payments/{pspReferenceId}/refunds\` with \`transactionRefundId\` (UUID) and \`amount\`
 - Refunds are irreversible once initiated
-- Handle INSUFFICIENT_FUNDS error
+- **INSUFFICIENT_FUNDS:** returns HTTP 200 with \`status: "ERROR"\` — implement automatic retry every 3-4 hours with a **new \`transactionRefundId\`** each attempt (the old one is consumed even on failure)
+- Track pending refunds and retry attempts associated with the original \`pspReferenceId\`
+- Stop retrying when refund reaches \`REFUNDED\` or a non-retriable error
 
 ### 8. Cancel Unpaid Orders (Optional)
 - \`POST /v1/checkouts/payments/{pspReferenceId}/cancel\`
@@ -68,22 +74,32 @@ This is the standard checkout flow where the customer approves each payment in t
 - Log \`x-transaction-id\` response header on EVERY API call
 - Store associated with payment record for support troubleshooting
 
-### 10. (Marketplaces) Register Recipients
-- If you transact on behalf of sellers, BCB requires identifying final beneficiaries
-- \`POST /v1/recipients\` to register each seller with name, document (CPF/CNPJ), bank account
-- Add \`recipients\` array to payment creation with \`referenceId\` and \`amount\` per beneficiary
-- Maximum 10 recipients per payment
+### 10. Register Recipients (Beneficiário Final)
+- **Required by Banco Central** (Circular BCB 3.978/2020) to identify final payment beneficiaries
+- \`POST /v1/recipients\` to register each beneficiary with name, document (CPF/CNPJ), bank account
+- Add \`recipients\` array to payment creation with \`referenceId\` and \`amount\` per beneficiary — max 10 per payment
+- Sending an existing \`referenceId\` performs an **upsert** (soft delete + new record)
+- If you believe this does not apply to your business model, contact the **NuPay B2B team** for confirmation before removing from scope
+
+## Pre-Integration Questions
+Before starting, answer these to tailor the integration:
+1. **Checkout environment:** web browser, native app (iOS/Android), or hybrid?
+2. **How checkout is rendered:** system browser, webview, or in-app browser? (webviews break Universal Links)
+3. **Webhook infrastructure:** do you have an exposed HTTPS endpoint? Do you use a queue (SQS, RabbitMQ)?
+4. **Customer CPF availability:** is the customer's CPF available at checkout time? (mandatory for payment-conditions)
+5. **Existing PSP:** do you already use another payment gateway? NuPay status lifecycle must map to your current flow
+6. **ERP/platform:** SAP, TOTVS, Shopify, VTEX, custom? (affects \`merchantOrderReference\` reconciliation)
 
 ## Endpoints Needed
 | Method | Path | Purpose |
 |---|---|---|
-| POST | /v2/checkouts/payment-conditions | Check availability (optional) |
+| POST | /v2/checkouts/payment-conditions | Check availability (mandatory) |
 | POST | /v1/checkouts/payments | Create payment |
 | GET | /v1/checkouts/payments/{pspReferenceId}/status | Poll status |
 | POST | /v1/checkouts/payments/{pspReferenceId}/cancel | Cancel unpaid |
 | POST | /v1/checkouts/payments/{pspReferenceId}/refunds | Create refund |
 | GET | /v1/checkouts/payments/{pspReferenceId}/refunds/{refundId} | Check refund status |
-| POST | /v1/recipients | Register final beneficiary (marketplaces) |
+| POST | /v1/recipients | Register final beneficiary (mandatory by default) |
 | GET | /v1/recipients/{referenceId} | Check beneficiary registration |
 
 ## Common Pitfalls
@@ -93,6 +109,7 @@ This is the standard checkout flow where the customer approves each payment in t
 - Not implementing polling fallback (webhooks can fail)
 - Trying to cancel a COMPLETED payment (use refund instead)
 - Not implementing retry with exponential backoff for 429/5xx errors
+- Using \`items[].discount\` field for discounts (it is not used or validated by NuPay — for 2FA discounts, contact the integrations team)
 
 ## Sandbox Testing
 Use the \`get_sandbox_test_scenarios\` tool with flow="2fa" for complete test amount ranges.
@@ -133,7 +150,7 @@ Choose based on channel:
 
 **CIBA (Web Desktop):**
 - Generate signed JWT (same as OAuth2)
-- \`POST /v1/backchannel/authentication\` with customer's CPF
+- \`POST /v1/backchannel/authentication\` with \`login_hint\` = customer's CPF (**mandatory, no alternative identifier accepted**)
 - Customer receives push notification in Nubank app
 - NuPay calls your callback with \`access_token\` + \`refresh_token\`
 - Verify callback using \`client_notification_token\` in Authorization header
@@ -154,7 +171,7 @@ Choose based on channel:
 - Set \`paymentMethod.authorizationType: "pre_authorized"\`
 - Set \`paymentMethod.fundingSource\`: "debit", "credit", or "credit_with_additional_limit"
 - Set \`installments\` (1 for à vista)
-- Payment transitions to final status immediately — poll after creation
+- Payment transitions to final status faster than 2FA (no manual customer approval), but **status is still asynchronous** — polling via \`GET /v1/checkouts/payments/{pspReferenceId}/status\` is mandatory
 
 ### 8. Poll, Refund, Log
 - Same as 2FA flow: poll status, create refunds with \`transactionRefundId\`, log \`x-transaction-id\`
@@ -164,11 +181,20 @@ Choose based on channel:
 - Discard \`refresh_token\` after cancellation
 - Next purchase requires new authorization flow
 
-### 10. (Marketplaces) Register Recipients
-- If you transact on behalf of sellers, BCB requires identifying final beneficiaries
-- \`POST /v1/recipients\` to register each seller with name, document (CPF/CNPJ), bank account
-- Add \`recipients\` array to payment creation with \`referenceId\` and \`amount\` per beneficiary
-- Maximum 10 recipients per payment
+### 10. Register Recipients (Beneficiário Final)
+- **Required by Banco Central** (Circular BCB 3.978/2020) to identify final payment beneficiaries
+- \`POST /v1/recipients\` to register each beneficiary with name, document (CPF/CNPJ), bank account
+- Add \`recipients\` array to payment creation with \`referenceId\` and \`amount\` per beneficiary — max 10 per payment
+- If you believe this does not apply, contact the **NuPay B2B team** for confirmation before removing from scope
+
+## Pre-Integration Questions
+Before starting, answer these to tailor the integration:
+1. **Authorization method:** OAuth2 (mobile/app-to-app) or CIBA (web desktop push notification)?
+2. **Multiple subscriptions per customer?** If yes, request multiple tokens feature from NuPay integrations team
+3. **Checkout environment:** web browser, native app (iOS/Android), or hybrid?
+4. **Webhook infrastructure:** do you have an exposed HTTPS endpoint? Do you use a queue (SQS, RabbitMQ)?
+5. **Existing PSP:** do you already use another payment gateway? NuPay status lifecycle must map to your current flow
+6. **Funding source preference:** will you offer fallback between debit/credit? (requires integrations team authorization + customer disclaimer)
 
 ## Endpoints Needed
 | Method | Path | Purpose |
@@ -182,7 +208,7 @@ Choose based on channel:
 | GET | /v1/checkouts/payments/{pspReferenceId}/status | Poll status |
 | POST | /v1/checkouts/payments/{pspReferenceId}/refunds | Create refund |
 | GET | /v1/checkouts/payments/{pspReferenceId}/refunds/{refundId} | Check refund |
-| POST | /v1/recipients | Register final beneficiary (marketplaces) |
+| POST | /v1/recipients | Register final beneficiary (mandatory by default) |
 | GET | /v1/recipients/{referenceId} | Check beneficiary registration |
 
 ## Common Pitfalls
@@ -192,6 +218,9 @@ Choose based on channel:
 - Sharing private JWK key (d property) — only share public key
 - Skipping payment conditions check before charging
 - Not displaying BCB IN83 required fields for installments with additional limit
+- Implementing funding source fallback without integrations team authorization and customer disclaimer
+- Applying funding source fallback on annual subscription plans (prohibited)
+- Expecting multiple tokens per customer to work by default (requires NuPay integrations team activation — new auth invalidates previous tokens otherwise)
 
 ## Sandbox Testing
 Use the \`get_sandbox_test_scenarios\` tool with flow="tokenized" for complete test amount ranges.
@@ -235,11 +264,18 @@ const PLATFORM_NOTES: Record<string, string> = {
 
   mobile: `## Platform Notes — Mobile
 
-- \`paymentUrl\` is a Nubank deep link — opens the Nubank app directly
-- **Android:** Launch via \`Intent\` with the paymentUrl as the URI
-- **iOS:** Use Universal Links — the URL scheme triggers the Nubank app
+- \`paymentUrl\` is already a Universal Link — the OS intercepts it and opens the Nubank app
+- **Android:** Use App Links / \`Intent\` with the paymentUrl as the URI
+- **iOS:** Universal Links work automatically in the system browser
 - If Nubank app is not installed, the URL falls back to the Nubank web page
-- After approval/cancellation, customer returns to your app via \`returnUrl\`/\`cancelUrl\``,
+- After approval/cancellation, customer returns to your app via \`returnUrl\`/\`cancelUrl\`
+
+### Universal Link Troubleshooting
+If the Nubank app does not open:
+1. **Webview?** Universal Links do NOT work in webviews (WKWebView, Chrome Custom Tabs) — open in system browser instead
+2. **Programmatic redirect?** iOS requires the redirect to come from a direct user tap, not \`window.location.href\` or a 302 — trigger payment creation + redirect inside a click event handler
+3. **iOS dismissed banner?** If the user previously tapped "Open in Safari", iOS remembers and won't offer the app again for that domain — user must long-press the link and choose "Open in App"
+4. **Android missing path?** Verify the \`paymentUrl\` path is covered in the app's \`assetlinks.json\``,
 };
 
 function getFrameworkNotes(language: string): string {

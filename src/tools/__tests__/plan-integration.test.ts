@@ -50,7 +50,7 @@ describe("planIntegration", () => {
     const result = planIntegration("checkout", undefined, "both");
     expect(result).toContain("Desktop");
     expect(result).toContain("Mobile");
-    expect(result).toContain("deep link");
+    expect(result).toContain("Universal Link");
   });
 
   it("works with all parameters combined", () => {

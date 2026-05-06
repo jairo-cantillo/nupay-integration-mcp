@@ -104,6 +104,59 @@ For **marketplace** merchants transacting on behalf of sellers, BCB Circular 3.9
 - Maximum 10 recipients per payment
 - This field is optional and non-blocking — payments succeed even if recipients aren't registered yet, but compliance requires it
 
+## Refund Retry Strategy
+
+When a refund fails with `INSUFFICIENT_FUNDS` (HTTP 200, `status: "ERROR"`):
+
+- **Use a NEW `transactionRefundId`** for each retry attempt — the previous ID is consumed even on failure. Reusing it returns 400 "already requested".
+- Implement automatic retry every **3-4 hours** — this avoids customer friction while waiting for the merchant balance to recover from new transactions
+- Track pending refunds and their retry attempts associated with the original `pspReferenceId`
+- Stop retrying when refund reaches `REFUNDED` or a non-retriable error (`FULLY_REFUNDED`, `MAX_NUMBER_REACHED`, account closed)
+- For non-retriable errors, escalate to NuPay support with the `x-transaction-id`
+
+## CPF Requirements by Flow
+
+| Flow | Where CPF is needed | How it's provided |
+|---|---|---|
+| 2FA | `document` field in `POST /v2/checkouts/payment-conditions` (mandatory) | In the request body |
+| 2FA | `shopper.document` in `POST /v1/checkouts/payments` | In the request body |
+| Tokenized (CIBA) | `login_hint` in `POST /v1/backchannel/authentication` (mandatory, no alternative) | In the request body |
+| Tokenized | Not needed in payment-conditions or payment creation | Carried by the `access_token` |
+
+**Important:** In the 2FA flow, the API uses the customer's CPF to identify their Nubank account. Omitting it will result in an error. In the tokenized flow, identity is bound to the `access_token`.
+
+## Funding Source Fallback (Tokenized Subscriptions)
+
+Subscription merchants may want to alternate between `debit` and `credit` based on `payment-conditions` response. This is allowed **only if**:
+
+1. Merchant implements a **disclaimer at checkout start** — customer must be informed the charge may use a different funding source
+2. Merchant **prioritizes the customer's saved preference** — if preferred method is available, always use it
+3. Merchant has **authorization from the NuPay integrations team** — there is a rule based on average ticket that must be validated
+
+**Restrictions:**
+- **Annual plans (planos anuais): fallback is prohibited** — the higher average ticket disqualifies them
+- Never charge in a non-preferred method when the preferred is available
+- Never apply fallback silently without prior customer consent
+
+## Multiple Tokens per Customer (Tokenized)
+
+By default, generating a new authorization for the same customer **invalidates the previous token**.
+
+- If your use case requires multiple active tokens per customer (e.g., multiple subscription plans), contact the **NuPay integrations team to request activation** of the multiple tokens feature
+- **Debugging tip:** If a recurring charge fails with an invalid/expired token that should still be valid, check if a new `refresh_token` was recently generated for the same customer — the old one was likely invalidated
+- Once the multiple tokens feature is enabled, each token remains valid independently
+
+## Shared Tokens
+
+Shared tokens (e.g., tokens shared across merchants in the same group or holding) are not covered in the current documentation. If your use case requires shared tokens, contact the **NuPay integrations team** directly for guidance.
+
+## Discount Handling
+
+The `items[].discount` field in the payment creation schema is **not used or validated** by NuPay. Do not rely on it for discount logic.
+
+- **Tokenized flow:** Apply discounts via `POST /v2/checkouts/payment-conditions` using the `paymentMethods` array with different amounts per funding source
+- **2FA flow:** No self-serve discount mechanism exists — contact the **NuPay integrations team** for guidance
+
 ## Environment URLs
 
 | Environment | API Base | Auth Base |

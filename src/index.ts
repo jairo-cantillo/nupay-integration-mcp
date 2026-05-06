@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 const KNOWLEDGE_DATE = "2026-04-30";
 
 if (process.argv.includes("--version") || process.argv.includes("-v")) {
@@ -27,7 +27,7 @@ import { registerStartTokenizedPrompt } from "./prompts/start-tokenized.js";
 const server = new McpServer(
   {
     name: "nupay-integration-mcp",
-    version: "0.3.0",
+    version: "0.4.0",
   },
   {
     instructions:
