@@ -195,6 +195,7 @@ Before starting, answer these to tailor the integration:
 4. **Webhook infrastructure:** do you have an exposed HTTPS endpoint? Do you use a queue (SQS, RabbitMQ)?
 5. **Existing PSP:** do you already use another payment gateway? NuPay status lifecycle must map to your current flow
 6. **Funding source preference:** will you offer fallback between debit/credit? (requires integrations team authorization + customer disclaimer)
+7. **Shared tokens?** If you operate multiple brands/merchants in the same group and want tokens shared across them, contact the NuPay integrations team to discuss
 
 ## Endpoints Needed
 | Method | Path | Purpose |

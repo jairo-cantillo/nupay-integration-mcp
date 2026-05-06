@@ -29,7 +29,13 @@ Below is everything available to you, what each tool does, and the recommended o
 **API reference on demand.** Look up any NuPay endpoint by HTTP method and path (e.g., \`"post"\`, \`"refunds"\`). Returns the full endpoint specification with resolved schemas, request/response examples, and every error code. Use empty strings to list all 18 endpoints.
 
 ### get_schema
-**Schema deep-dive.** Look up any request or response schema by name or fuzzy match (e.g., \`"checkout creation"\` finds \`NuPayCheckoutCreationRequest\`). Returns the complete schema with all nested references resolved — no chasing \`$ref\` pointers across pages of docs.
+**Schema deep-dive.** Look up any request or response schema by name or fuzzy match (e.g., \`"checkout creation"\` finds \`NuPayCheckoutCreationRequest\`). Returns the complete schema with all nested references resolved — no chasing \`$ref\` pointers across pages of docs. If no match is found, suggests the closest alternatives.
+
+### lookup_error
+**Error code reference.** Got a \`CANCELLED_BY_INSTITUTION\`, \`AB03\`, \`INSUFFICIENT_FUNDS\`, or HTTP 429? Pass the code and get back the cause, fix, and context. Supports NuPay payment status codes, refund error types, BCB Pix codes, and HTTP status codes. Also supports fuzzy search (e.g., \`"CANCELLED"\` finds all cancellation codes).
+
+### compare_flows
+**2FA vs Tokenized — side by side.** Returns a structured comparison of both payment flows across 17 dimensions: customer experience, auth setup, credentials, regulatory requirements, installments, and more. Includes a decision guide mapping use cases to recommended flows and confirms both flows can coexist on the same merchant account.
 
 ---
 

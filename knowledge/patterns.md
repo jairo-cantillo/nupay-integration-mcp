@@ -138,6 +138,38 @@ Subscription merchants may want to alternate between `debit` and `credit` based 
 - Never charge in a non-preferred method when the preferred is available
 - Never apply fallback silently without prior customer consent
 
+## Universal Link / Deep Link — Reference Implementation
+
+When redirecting customers to `paymentUrl` on mobile, the redirect **must** come from a direct user tap. Here is the correct pattern:
+
+```html
+<!-- Correct: paymentUrl opened from a user-initiated click handler -->
+<button id="payNubank">Pay with Nubank</button>
+<script>
+  document.getElementById('payNubank').addEventListener('click', async () => {
+    const res = await fetch('/api/create-nupay-payment', { method: 'POST', /* your order data */ });
+    const { paymentUrl } = await res.json();
+    window.open(paymentUrl, '_self');  // Opens in same tab — OS intercepts Universal Link
+  });
+</script>
+```
+
+**Common failures and fixes:**
+
+| Symptom | Root Cause | Fix |
+|---|---|---|
+| Nubank app doesn't open on iOS | Redirect is programmatic (`window.location.href` on page load, or 302 redirect) | Move redirect inside a click event handler |
+| Nubank app doesn't open in partner app | Checkout renders in a webview (WKWebView) | Open in SFSafariViewController (iOS) or Chrome Custom Tabs (Android) |
+| Nubank app used to open, now doesn't (iOS) | User previously tapped "Open in Safari" on the Universal Link banner | User must long-press the link → "Open in App". Cannot be fixed programmatically. |
+| Nubank app doesn't open on Android | App Links not configured for the `paymentUrl` path | Verify `assetlinks.json` covers the path. This is on Nubank's side — contact NuPay support if suspected. |
+| Redirect chain breaks interception | Merchant → partner → NuPay (multiple 302s) | Minimize redirect hops. Open `paymentUrl` directly from your domain, not through intermediaries. |
+
+**Diagnostic checklist:**
+1. Is the checkout in a system browser or a webview? → Webviews break Universal Links
+2. Is the redirect triggered by a user tap or programmatically? → Must be user tap on iOS
+3. Has the user previously dismissed the Universal Link? → iOS remembers, cannot override
+4. Is the `paymentUrl` path covered in Android's `assetlinks.json`? → Check with NuPay support
+
 ## Multiple Tokens per Customer (Tokenized)
 
 By default, generating a new authorization for the same customer **invalidates the previous token**.

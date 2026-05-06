@@ -78,7 +78,32 @@ const CURL_EXAMPLES: Record<string, string> = {
   -H 'Content-Type: application/json' \\
   -d '{ "amount": 50.00, "document": "12345678900" }'`,
 
-  webhook_handler: `Webhook handlers are server-side endpoints. Use language="nodejs", "python", or "java" for a webhook handler example.`,
+  webhook_handler: `# Simulate a NuPay payment notification to test your local webhook handler
+
+# Payment notification — send this to your webhook endpoint
+curl -X POST http://localhost:3000/webhooks/nupay \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "pspReferenceId": "test-psp-ref-001",
+    "referenceId": "order-12345",
+    "timestamp": "2026-01-15T10:30:00.000Z",
+    "paymentMethodType": "nupay"
+  }'
+
+# Refund notification — send this to your refund webhook endpoint
+curl -X POST http://localhost:3000/webhooks/nupay/refunds \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "pspReferenceId": "test-psp-ref-001",
+    "referenceId": "order-12345",
+    "transactionRefundId": "test-refund-001",
+    "refundId": "test-refund-id-001",
+    "timestamp": "2026-01-15T11:00:00.000Z"
+  }'
+
+# IMPORTANT: These notifications do NOT contain the payment/refund status.
+# Your handler must respond 200, then poll the status endpoint:
+#   GET /v1/checkouts/payments/{pspReferenceId}/status`,
 
   full_integration: `Full integration examples are application code. Use language="nodejs", "python", or "java" for a complete working app.`,
 };
@@ -366,16 +391,28 @@ const HEADERS = {
 
 // ─── NuPay API Client ─────────────────────────────────────────────────────────
 
-async function nupayRequest(method, path, body) {
-  const response = await fetch(\`\${NUPAY_BASE}\${path}\`, {
-    method,
-    headers: body ? HEADERS : { ...HEADERS, "Content-Type": undefined },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const transactionId = response.headers.get("x-transaction-id");
-  console.log(\`[NuPay] \${method} \${path} → \${response.status} (x-transaction-id: \${transactionId})\`);
-  const data = await response.json().catch(() => null);
-  return { status: response.status, ok: response.ok, data, transactionId };
+async function nupayRequest(method, path, body, retries = 3) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const response = await fetch(\`\${NUPAY_BASE}\${path}\`, {
+      method,
+      headers: body ? HEADERS : { "X-Merchant-Key": HEADERS["X-Merchant-Key"], "X-Merchant-Token": HEADERS["X-Merchant-Token"] },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const transactionId = response.headers.get("x-transaction-id");
+    console.log(\`[NuPay] \${method} \${path} → \${response.status} (x-transaction-id: \${transactionId}, attempt: \${attempt})\`);
+
+    // Retry on 429 (rate limit) and 5xx (server errors)
+    if ((response.status === 429 || response.status >= 500) && attempt < retries) {
+      const retryAfter = response.headers.get("retry-after");
+      const delay = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, attempt) * 1000;
+      console.log(\`[NuPay] Retrying in \${delay}ms...\`);
+      await new Promise((r) => setTimeout(r, delay));
+      continue;
+    }
+
+    const data = await response.json().catch(() => null);
+    return { status: response.status, ok: response.ok, data, transactionId };
+  }
 }
 
 // ─── Create Payment ───────────────────────────────────────────────────────────
@@ -697,6 +734,7 @@ def check_payment_conditions(amount, customer_cpf):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 import uuid
+import time
 import requests
 from flask import Flask, request, jsonify
 
@@ -711,11 +749,22 @@ HEADERS = {
 }
 
 
-def nupay_request(method, path, json_body=None):
-    """Central NuPay API caller with x-transaction-id logging."""
-    response = requests.request(method, f"{NUPAY_BASE}{path}", headers=HEADERS, json=json_body)
-    tid = response.headers.get("x-transaction-id")
-    print(f"[NuPay] {method} {path} → {response.status_code} (x-transaction-id: {tid})")
+def nupay_request(method, path, json_body=None, retries=3):
+    """Central NuPay API caller with x-transaction-id logging and retry."""
+    for attempt in range(1, retries + 1):
+        response = requests.request(method, f"{NUPAY_BASE}{path}", headers=HEADERS, json=json_body)
+        tid = response.headers.get("x-transaction-id")
+        print(f"[NuPay] {method} {path} → {response.status_code} (x-transaction-id: {tid}, attempt: {attempt})")
+
+        # Retry on 429 (rate limit) and 5xx (server errors)
+        if response.status_code in (429, 500, 502, 503, 504) and attempt < retries:
+            retry_after = response.headers.get("Retry-After")
+            delay = int(retry_after) if retry_after else 2 ** attempt
+            print(f"[NuPay] Retrying in {delay}s...")
+            time.sleep(delay)
+            continue
+
+        return response, tid
     return response, tid
 
 

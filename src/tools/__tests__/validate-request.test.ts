@@ -93,4 +93,47 @@ describe("validateRequest", () => {
     const result = validateRequest("{}", "delete_payment");
     expect(result).toContain("Unsupported operation");
   });
+
+  it("catches snake_case field names and suggests camelCase", () => {
+    const body = JSON.stringify({
+      reference_id: "ref-1",
+      merchant_order_reference: "MOR-1",
+      amount: { value: 50.00, currency: "BRL" },
+      payment_method: { type: "nupay", authorizationType: "manually_authorized" },
+      shopper: { firstName: "Test", lastName: "User", document: "123", documentType: "CPF", email: "t@t.com" },
+      items: [{ id: "1", description: "Test", value: 50, quantity: 1 }],
+      callbackUrl: "https://example.com/hook",
+    });
+    const result = validateRequest(body, "create_payment");
+    expect(result).toContain("paymentMethod");
+    expect(result).toContain("referenceId");
+  });
+
+  it("catches bare number amount instead of object", () => {
+    const body = JSON.stringify({
+      merchantOrderReference: "MOR-1",
+      referenceId: "ref-1",
+      amount: 100,
+      paymentMethod: { type: "nupay", authorizationType: "manually_authorized" },
+      shopper: { firstName: "Test", lastName: "User", document: "123", documentType: "CPF", email: "t@t.com" },
+      items: [{ id: "1", description: "Test", value: 50, quantity: 1 }],
+    });
+    const result = validateRequest(body, "create_payment");
+    expect(result).toContain("must be an object");
+  });
+
+  it("catches invalid enum values", () => {
+    const body = JSON.stringify({
+      merchantOrderReference: "MOR-1",
+      referenceId: "ref-1",
+      amount: { value: 50.00, currency: "BRL" },
+      paymentMethod: { type: "PIX", authorizationType: "auto" },
+      shopper: { firstName: "Test", lastName: "User", document: "123", documentType: "RG", email: "t@t.com" },
+      items: [{ id: "1", description: "Test", value: 50, quantity: 1 }],
+    });
+    const result = validateRequest(body, "create_payment");
+    expect(result).toContain('"nupay"');
+    expect(result).toContain("manually_authorized");
+    expect(result).toContain('"CPF"');
+  });
 });

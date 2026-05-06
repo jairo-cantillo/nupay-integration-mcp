@@ -81,7 +81,19 @@ export function getSchema(name: string): string {
     .slice(0, MAX_FUZZY_RESULTS);
 
   if (scored.length === 0) {
-    return `No schema found matching "${name}". Use get_schema with an empty name to list all available schemas.`;
+    // Compute suggestions using character overlap for truly no-match queries
+    const suggestions = Object.keys(schemas)
+      .map((n) => {
+        const nLower = n.toLowerCase();
+        const qLower = name.toLowerCase();
+        const overlap = qLower.split("").filter((c) => nLower.includes(c)).length;
+        return { name: n, score: overlap / Math.max(qLower.length, 1) };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+
+    const suggestionList = suggestions.map((s) => `\`${s.name}\``).join(", ");
+    return `No schema found matching "${name}". Did you mean: ${suggestionList}?\n\nUse get_schema with an empty name to list all available schemas.`;
   }
 
   return scored

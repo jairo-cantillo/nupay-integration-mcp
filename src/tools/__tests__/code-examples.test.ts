@@ -35,9 +35,11 @@ describe("getCodeExample", () => {
     expect(result).toContain("x-transaction-id");
   });
 
-  it("rejects cURL webhook_handler", () => {
+  it("returns cURL webhook simulation commands", () => {
     const result = getCodeExample("curl", "webhook_handler", "2fa");
-    expect(result).toContain("server-side");
+    expect(result).toContain("localhost");
+    expect(result).toContain("pspReferenceId");
+    expect(result).toContain("refunds");
   });
 
   it("returns error for unsupported language", () => {
