@@ -42,6 +42,21 @@ const MAX_FUZZY_RESULTS = 3;
 // Primary schemas (Request/Response) are more likely what users want
 const PRIMARY_SUFFIXES = ["request", "response"];
 
+// Common prefixes that don't help discriminate between schemas
+const STOPWORDS = new Set(["nu", "pay", "nupay", "api", "the", "a"]);
+
+/** Split a camelCase/PascalCase string into lowercase words.
+ *  "NuPayRefundRequest" → ["nu", "pay", "refund", "request"]
+ *  "RefundCreationRequest" → ["refund", "creation", "request"] */
+function splitCamelCase(str: string): string[] {
+  return str
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[\s_\-]+/)
+    .filter(Boolean);
+}
+
 /** Score a match: higher = better. 0 = no match. */
 function matchScore(query: string, schemaName: string): number {
   const q = query.toLowerCase().replace(/[_\-\s]+/g, "");
@@ -55,9 +70,15 @@ function matchScore(query: string, schemaName: string): number {
   if (n.startsWith(q)) return 80 + primaryBonus;
   // Substring match
   if (n.includes(q)) return 60 + primaryBonus;
-  // Query words all present in name (e.g. "checkout creation" → NuPayCheckoutCreationRequest)
-  const words = query.toLowerCase().split(/[_\-\s]+/).filter(Boolean);
-  if (words.length > 1 && words.every((w) => n.includes(w))) return 40 + primaryBonus;
+  // Word-set match: split by separators OR camelCase boundaries
+  const words = query.includes(" ") || query.includes("_") || query.includes("-")
+    ? query.toLowerCase().split(/[_\-\s]+/).filter(Boolean)
+    : splitCamelCase(query);
+  const meaningfulWords = words.filter((w) => !STOPWORDS.has(w));
+  const schemaWords = splitCamelCase(schemaName);
+  if (meaningfulWords.length > 0 && meaningfulWords.every((w) => schemaWords.some((sw) => sw.includes(w)))) {
+    return 40 + primaryBonus;
+  }
   return 0;
 }
 

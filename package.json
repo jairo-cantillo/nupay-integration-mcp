@@ -1,6 +1,6 @@
 {
   "name": "@nupay/integration-mcp",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "MCP server for NuPay payment API integration assistance",
   "type": "module",
   "main": "dist/index.js",

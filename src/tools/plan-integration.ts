@@ -8,12 +8,49 @@ const TOKENIZED_KEYWORDS = [
   "ciba", "oauth", "jwk",
 ];
 
-function detectFlow(useCase: string): "2fa" | "tokenized" {
+// Use cases that NuPay does not natively support
+const UNSUPPORTED_KEYWORDS = [
+  "split payment", "split", "boleto", "pix direct", "credit card direct",
+  "wire transfer", "bank transfer", "ted", "doc",
+];
+
+// Use cases that are partially supported but need clarification
+const MARKETPLACE_KEYWORDS = ["marketplace"];
+
+type FlowResult = {
+  flow: "2fa" | "tokenized";
+  warnings: string[];
+};
+
+function detectFlow(useCase: string): FlowResult {
   const lower = useCase.toLowerCase();
-  for (const keyword of TOKENIZED_KEYWORDS) {
-    if (lower.includes(keyword)) return "tokenized";
+  const warnings: string[] = [];
+
+  // Check for unsupported features first
+  const unsupported = UNSUPPORTED_KEYWORDS.filter((kw) => lower.includes(kw));
+  if (unsupported.length > 0) {
+    warnings.push(
+      `> **Warning:** Your use case mentions "${unsupported.join('", "')}" which is not a native NuPay feature. ` +
+      `NuPay supports two payment flows: **2FA** (one-time checkout with customer approval) and **Tokenized** (recurring/subscriptions with pre-authorization). ` +
+      `If your use case requires features not covered by these flows (e.g., split payments, direct Pix, boleto), ` +
+      `contact the **NuPay B2B team** before starting implementation.\n`
+    );
   }
-  return "2fa";
+
+  // Check for marketplace (supported via recipients, but no fund splitting)
+  if (MARKETPLACE_KEYWORDS.some((kw) => lower.includes(kw))) {
+    warnings.push(
+      `> **Note — Marketplace:** NuPay supports marketplace payment tracking via the **Recipients API** (Beneficiário Final, Step 10 below), ` +
+      `but does not provide native fund splitting. Funds are settled to the merchant account — sub-merchant payouts must be handled by your platform. ` +
+      `See the \`recipients\` endpoints for regulatory-compliant beneficiary registration.\n`
+    );
+  }
+
+  // Detect flow
+  for (const keyword of TOKENIZED_KEYWORDS) {
+    if (lower.includes(keyword)) return { flow: "tokenized", warnings };
+  }
+  return { flow: "2fa", warnings };
 }
 
 const PLAN_2FA = `# Integration Plan: NuPay 2FA (Manual Authorization) Flow
@@ -296,8 +333,14 @@ function getPlatformNotes(platform: string): string {
 }
 
 export function planIntegration(useCase: string, language?: string, platform?: string): string {
-  const flow = detectFlow(useCase);
-  let plan = flow === "tokenized" ? PLAN_TOKENIZED : PLAN_2FA;
+  const { flow, warnings } = detectFlow(useCase);
+  let plan = "";
+
+  if (warnings.length > 0) {
+    plan += warnings.join("\n") + "\n---\n\n";
+  }
+
+  plan += flow === "tokenized" ? PLAN_TOKENIZED : PLAN_2FA;
 
   if (language) {
     const notes = getFrameworkNotes(language);

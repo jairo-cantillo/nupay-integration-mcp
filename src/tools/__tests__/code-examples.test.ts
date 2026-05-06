@@ -84,4 +84,25 @@ describe("getCodeExample", () => {
     expect(result).toContain("get_code_example");
     expect(result).toContain("check_status");
   });
+
+  it("Node.js create_payment includes retry logic", () => {
+    const result = getCodeExample("nodejs", "create_payment", "2fa");
+    expect(result).toContain("Retry");
+    expect(result).toContain("429");
+    expect(result).toContain("fetchWithRetry");
+  });
+
+  it("Python create_payment includes retry logic", () => {
+    const result = getCodeExample("python", "create_payment", "2fa");
+    expect(result).toContain("retry");
+    expect(result).toContain("time.sleep");
+    expect(result).toContain("429");
+  });
+
+  it("Java create_payment includes retry logic", () => {
+    const result = getCodeExample("java", "create_payment", "2fa");
+    expect(result).toContain("Retry");
+    expect(result).toContain("Thread.sleep");
+    expect(result).toContain("429");
+  });
 });

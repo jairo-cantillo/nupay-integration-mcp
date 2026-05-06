@@ -111,15 +111,32 @@ curl -X POST http://localhost:3000/webhooks/nupay/refunds \\
 // ─── Node.js Examples ─────────────────────────────────────────────────────────
 
 const NODEJS_EXAMPLES: Record<string, string> = {
-  create_payment: `const NUPAY_BASE = "https://sandbox-api.spinpay.com.br";
+  create_payment: `// Production tip: Includes retry for 429/5xx. For all operations, see get_code_example('nodejs', 'full_integration')
+const NUPAY_BASE = "https://sandbox-api.spinpay.com.br";
 const HEADERS = {
   "X-Merchant-Key": "YOUR_MERCHANT_KEY",
   "X-Merchant-Token": "YOUR_MERCHANT_TOKEN",
   "Content-Type": "application/json",
 };
 
+// Retry helper: exponential backoff for 429/5xx, respects Retry-After header
+async function fetchWithRetry(url, options, maxRetries = 3) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const response = await fetch(url, options);
+    if (response.status === 429 || response.status >= 500) {
+      if (attempt === maxRetries) return response; // exhausted retries
+      const retryAfter = response.headers.get("Retry-After");
+      const delay = retryAfter ? parseInt(retryAfter, 10) * 1000 : Math.pow(2, attempt) * 1000;
+      console.log(\`[NuPay] Retry \${attempt + 1}/\${maxRetries} after \${delay}ms (status: \${response.status})\`);
+      await new Promise((r) => setTimeout(r, delay));
+      continue;
+    }
+    return response; // 2xx or 4xx (don't retry client errors)
+  }
+}
+
 async function createPayment(order) {
-  const response = await fetch(\`\${NUPAY_BASE}/v1/checkouts/payments\`, {
+  const response = await fetchWithRetry(\`\${NUPAY_BASE}/v1/checkouts/payments\`, {
     method: "POST",
     headers: HEADERS,
     body: JSON.stringify({
@@ -510,7 +527,9 @@ app.listen(3000, () => console.log("NuPay integration server running on http://l
 // ─── Python Examples ──────────────────────────────────────────────────────────
 
 const PYTHON_EXAMPLES: Record<string, string> = {
-  create_payment: `import requests
+  create_payment: `# Production tip: Includes retry for 429/5xx. For all operations, see get_code_example('python', 'full_integration')
+import requests
+import time
 import uuid
 
 NUPAY_BASE = "https://sandbox-api.spinpay.com.br"
@@ -520,34 +539,45 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
+def nupay_request(method, path, json=None, max_retries=3):
+    """Make a NuPay API call with retry for 429/5xx and Retry-After support."""
+    url = f"{NUPAY_BASE}{path}"
+    for attempt in range(max_retries + 1):
+        response = requests.request(method, url, headers=HEADERS, json=json)
+        if response.status_code == 429 or response.status_code >= 500:
+            if attempt == max_retries:
+                return response  # exhausted retries
+            retry_after = response.headers.get("Retry-After")
+            delay = int(retry_after) if retry_after else 2 ** attempt
+            print(f"[NuPay] Retry {attempt + 1}/{max_retries} after {delay}s (status: {response.status_code})")
+            time.sleep(delay)
+            continue
+        return response  # 2xx or 4xx (don't retry client errors)
+
 def create_payment(order):
-    response = requests.post(
-        f"{NUPAY_BASE}/v1/checkouts/payments",
-        headers=HEADERS,
-        json={
-            "referenceId": str(order["id"]),
-            "merchantOrderReference": order["reference"],
-            "amount": {"value": order["amount"], "currency": "BRL"},
-            "paymentMethod": {"type": "nupay", "authorizationType": "manually_authorized"},
-            "shopper": {
-                "firstName": order["customer"]["first_name"],
-                "lastName": order["customer"]["last_name"],
-                "document": order["customer"]["cpf"],
-                "documentType": "CPF",
-                "email": order["customer"]["email"],
-            },
-            "items": [
-                {"id": item["sku"], "description": item["name"], "value": item["price"], "quantity": item["qty"]}
-                for item in order["items"]
-            ],
-            "paymentFlow": {
-                "returnUrl": f"https://yoursite.com/orders/{order['id']}/success",
-                "cancelUrl": f"https://yoursite.com/orders/{order['id']}/cancel",
-            },
-            "callbackUrl": "https://yoursite.com/webhooks/nupay",
-            "delayToAutoCancel": 30,
+    response = nupay_request("POST", "/v1/checkouts/payments", json={
+        "referenceId": str(order["id"]),
+        "merchantOrderReference": order["reference"],
+        "amount": {"value": order["amount"], "currency": "BRL"},
+        "paymentMethod": {"type": "nupay", "authorizationType": "manually_authorized"},
+        "shopper": {
+            "firstName": order["customer"]["first_name"],
+            "lastName": order["customer"]["last_name"],
+            "document": order["customer"]["cpf"],
+            "documentType": "CPF",
+            "email": order["customer"]["email"],
         },
-    )
+        "items": [
+            {"id": item["sku"], "description": item["name"], "value": item["price"], "quantity": item["qty"]}
+            for item in order["items"]
+        ],
+        "paymentFlow": {
+            "returnUrl": f"https://yoursite.com/orders/{order['id']}/success",
+            "cancelUrl": f"https://yoursite.com/orders/{order['id']}/cancel",
+        },
+        "callbackUrl": "https://yoursite.com/webhooks/nupay",
+        "delayToAutoCancel": 30,
+    })
 
     transaction_id = response.headers.get("x-transaction-id")
     print(f"[NuPay] x-transaction-id: {transaction_id}")
@@ -861,7 +891,8 @@ if __name__ == "__main__":
 // ─── Java Examples ────────────────────────────────────────────────────────────
 
 const JAVA_EXAMPLES: Record<string, string> = {
-  create_payment: `import java.net.URI;
+  create_payment: `// Production tip: Includes retry for 429/5xx. For all operations, see get_code_example('java', 'full_integration')
+import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -869,6 +900,26 @@ import java.net.http.HttpResponse;
 public class NuPayClient {
     private static final String BASE_URL = "https://sandbox-api.spinpay.com.br";
     private static final HttpClient client = HttpClient.newHttpClient();
+    private static final int MAX_RETRIES = 3;
+
+    // Retry helper: exponential backoff for 429/5xx, respects Retry-After header
+    private static HttpResponse<String> sendWithRetry(HttpRequest request) throws Exception {
+        for (int attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            int status = response.statusCode();
+            if (status == 429 || status >= 500) {
+                if (attempt == MAX_RETRIES) return response; // exhausted retries
+                long delay = response.headers().firstValue("Retry-After")
+                    .map(ra -> Long.parseLong(ra) * 1000)
+                    .orElse((long) Math.pow(2, attempt) * 1000);
+                System.out.printf("[NuPay] Retry %d/%d after %dms (status: %d)%n", attempt + 1, MAX_RETRIES, delay, status);
+                Thread.sleep(delay);
+                continue;
+            }
+            return response; // 2xx or 4xx (don't retry client errors)
+        }
+        throw new RuntimeException("Unreachable");
+    }
 
     public static HttpResponse<String> createPayment(String orderJson) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
@@ -879,7 +930,7 @@ public class NuPayClient {
             .POST(HttpRequest.BodyPublishers.ofString(orderJson))
             .build();
 
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = sendWithRetry(request);
         String transactionId = response.headers().firstValue("x-transaction-id").orElse("N/A");
         System.out.println("[NuPay] x-transaction-id: " + transactionId);
 

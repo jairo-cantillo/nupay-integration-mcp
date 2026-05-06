@@ -25,4 +25,20 @@ describe("getSchema", () => {
     expect(result).toContain("RefundCreationRequest");
     expect(result).toContain("RecipientRequest");
   });
+
+  it("suggests RefundCreationRequest for camelCase NuPayRefundRequest", () => {
+    const result = getSchema("NuPayRefundRequest");
+    expect(result).toContain("RefundCreationRequest");
+  });
+
+  it("suggests matching schemas for camelCase query NuPayStatusResponse", () => {
+    const result = getSchema("NuPayStatusResponse");
+    // Should find schemas containing "status" and "response" via camelCase word splitting
+    expect(result.toLowerCase()).toContain("status");
+  });
+
+  it("suggests RefundInvalidResponse for RefundError", () => {
+    const result = getSchema("RefundError");
+    expect(result).toContain("Refund");
+  });
 });

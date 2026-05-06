@@ -61,4 +61,24 @@ describe("planIntegration", () => {
     expect(result).toContain("Platform Notes");
     expect(result).toContain("Intent");
   });
+
+  it("shows warning for unsupported use cases like split payments", () => {
+    const result = planIntegration("marketplace with split payments");
+    expect(result).toContain("Warning");
+    expect(result).toContain("split");
+    expect(result).toContain("NuPay B2B team");
+  });
+
+  it("shows warning for boleto (unsupported)", () => {
+    const result = planIntegration("boleto payments");
+    expect(result).toContain("Warning");
+    expect(result).toContain("not a native NuPay feature");
+  });
+
+  it("shows marketplace note about Recipients API", () => {
+    const result = planIntegration("marketplace checkout");
+    expect(result).toContain("Marketplace");
+    expect(result).toContain("Recipients API");
+    expect(result).toContain("fund splitting");
+  });
 });
