@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const VERSION = "0.4.0";
+const VERSION = "0.5.0";
 const KNOWLEDGE_DATE = "2026-04-30";
 
 if (process.argv.includes("--version") || process.argv.includes("-v")) {
@@ -21,13 +21,14 @@ import { registerSandboxScenariosTool } from "./tools/sandbox-scenarios.js";
 import { registerCodeExampleTool } from "./tools/code-examples.js";
 import { registerQuickstartTool } from "./tools/quickstart.js";
 import { registerValidateRequestTool } from "./tools/validate-request.js";
+import { registerHelpTool } from "./tools/help.js";
 import { registerStart2faPrompt } from "./prompts/start-2fa.js";
 import { registerStartTokenizedPrompt } from "./prompts/start-tokenized.js";
 
 const server = new McpServer(
   {
     name: "nupay-integration-mcp",
-    version: "0.4.0",
+    version: "0.5.0",
   },
   {
     instructions:
@@ -49,6 +50,7 @@ registerSandboxScenariosTool(server);
 registerCodeExampleTool(server);
 registerQuickstartTool(server);
 registerValidateRequestTool(server);
+registerHelpTool(server);
 
 // Prompts
 registerStart2faPrompt(server);
